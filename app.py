@@ -5,7 +5,9 @@ Streamlit Frontend with Real-time Conflict Analysis
 
 import streamlit as st
 from datetime import datetime
-import re
+
+from model import analyze_message as model_analyze
+from rules import apply_rules
 
 # Page configuration
 st.set_page_config(
@@ -66,67 +68,56 @@ if "current_user" not in st.session_state:
 if "last_analysis" not in st.session_state:
     st.session_state.last_analysis = None
 
-if "message_count" not in st.session_state:
-    st.session_state.message_count = {user: len(msgs) for user, msgs in DEMO_MESSAGES.items()}
-
-
 def analyze_text(text: str) -> dict:
-    """Analyze text for conflict indicators"""
-    text_lower = text.lower()
-    
-    # Conflict keywords by severity
-    conflict_keywords = {
-        'high': ['never', 'always', 'hate', 'stupid', 'worst', 'useless', 'going nowhere', 'idiot', 'terrible', 'never listen'],
-        'medium': ['disagree', 'problem', 'issue', 'worried', 'concerned', 'difficult', 'mistake', 'wrong', 'upset'],
-        'low': ['good', 'great', 'excellent', 'perfect', 'wonderful', 'thanks', 'appreciate', 'constructive', 'agree']
+    """Analyze text using ML + rules"""
+
+    try:
+        model_output = model_analyze(text)
+        model_error = None
+    except Exception as exc:
+        model_output = {
+            "sentiment": "neutral",
+            "sentiment_score": 0.0,
+            "toxicity": 0.0
+        }
+        model_error = str(exc)
+
+    rules_output = apply_rules(text, model_output)
+
+    risk_level = rules_output["risk_level"]
+    severity_map = {
+        "LOW": "low",
+        "MEDIUM": "medium",
+        "HIGH": "high"
     }
-    
-    severity = 'low'
-    flags = []
-    detected_words = []
-    
-    # Detect severity and flags
-    for level in ['high', 'medium', 'low']:
-        for keyword in conflict_keywords[level]:
-            if keyword in text_lower:
-                if keyword not in detected_words:
-                    detected_words.append(keyword)
-                    flags.append(f"'{keyword.title()}' detected")
-                if severity == 'low':
-                    severity = level
-                elif level == 'high' and severity != 'high':
-                    severity = 'high'
-    
-    # Calculate conflict score
-    score_map = {'low': 20, 'medium': 55, 'high': 85}
-    conflict_score = score_map.get(severity, 20)
-    
+    severity = severity_map.get(risk_level, "low")
+
+    conflict_score = int(round(rules_output["conflict_score"] * 100))
+    flags = [f"Rule triggered: {r.replace('_', ' ').title()}" for r in rules_output["triggered_rules"]]
+
     # Count caps (SHOUTING)
     caps_count = sum(1 for c in text if c.isupper())
-    if caps_count > len(text) * 0.3:
-        conflict_score = min(100, conflict_score + 15)
-        flags.append("⚠️ Excessive caps detected (aggressive tone)")
-    
-    # Count exclamation marks
-    exclamation_count = text.count('!')
-    if exclamation_count >= 3:
+    if text and caps_count > len(text) * 0.3:
         conflict_score = min(100, conflict_score + 10)
+        flags.append("⚠️ Excessive caps detected (aggressive tone)")
+
+    # Count exclamation marks
+    exclamation_count = text.count("!")
+    if exclamation_count >= 3:
+        conflict_score = min(100, conflict_score + 5)
         flags.append("⚠️ Multiple exclamation marks (strong emotion)")
-    
-    # Generate suggestion based on severity
-    suggestions = {
-        'high': "🔴 De-escalate: Use 'I' statements, listen actively, find common ground",
-        'medium': "🟡 Caution: Acknowledge concerns, avoid dismissive language",
-        'low': "🟢 Good: Keep this constructive tone, continue active listening"
-    }
-    
+
+    suggestion = rules_output["recommendation"]
+
     return {
-        "conflict_score": min(100, conflict_score),
+        "conflict_score": conflict_score,
         "severity": severity,
         "flags": flags if flags else ["✅ No negative indicators"],
-        "suggestion": suggestions.get(severity, "Continue communication"),
+        "suggestion": suggestion,
         "word_count": len(text.split()),
-        "detected_keywords": detected_words
+        "triggered_rules": rules_output["triggered_rules"],
+        "model": model_output,
+        "model_error": model_error
     }
 
 
@@ -274,9 +265,12 @@ with col_analysis:
         else:
             st.markdown("✅ No negative indicators detected")
         
-        # Show detected keywords
-        if analysis["detected_keywords"]:
-            st.caption(f"**Keywords detected:** {', '.join([f'`{kw}`' for kw in analysis['detected_keywords']])}")
+        # Show triggered rules
+        if analysis["triggered_rules"]:
+            st.caption(
+                "**Rules triggered:** "
+                + ", ".join([f"`{rule.replace('_', ' ')}`" for rule in analysis["triggered_rules"]])
+            )
         
         st.divider()
         
@@ -288,11 +282,17 @@ with col_analysis:
         
         # Message Analysis Details
         st.markdown("### 📋 Message Details")
-        col_detail1, col_detail2 = st.columns(2)
+        col_detail1, col_detail2, col_detail3 = st.columns(3)
         with col_detail1:
             st.metric("Word Count", analysis["word_count"])
         with col_detail2:
-            st.metric("Severity Level", analysis["severity"].upper())
+            st.metric("Sentiment", analysis["model"]["sentiment"].upper())
+            st.caption(f"Score: {analysis['model']['sentiment_score']}")
+        with col_detail3:
+            st.metric("Toxicity", f"{analysis['model']['toxicity']}")
+
+        if analysis.get("model_error"):
+            st.warning("Model fallback used. Check model.py dependencies or model download.")
         
         st.divider()
         
