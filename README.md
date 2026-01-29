@@ -25,6 +25,7 @@ cd /path/to/SentinalAI
 ```
 
 This will:
+
 - Clean up ports 3000 and 8000
 - Start the FastAPI backend on port 8000
 - Start the Next.js frontend on port 3000
@@ -41,18 +42,21 @@ This will:
 ### Initial Setup
 
 1. **Clone the Repository**
+
    ```bash
    git clone <YOUR_REPO_URL>
    cd SentinalAI
    ```
 
 2. **Create & Activate a Python Virtual Environment**
+
    ```bash
    python -m venv .venv
    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
    ```
 
 3. **Install Backend Dependencies**
+
    ```bash
    pip install -r requirements.txt
    ```
@@ -67,6 +71,7 @@ This will:
 ### Running the Project
 
 #### Option 1: Single Command (Recommended)
+
 ```bash
 ./run.sh
 ```
@@ -74,17 +79,20 @@ This will:
 #### Option 2: Manual (Two Terminals)
 
 Terminal 1 - Backend:
+
 ```bash
 python -m uvicorn app:app --reload --port 8000
 ```
 
 Terminal 2 - Frontend:
+
 ```bash
 cd frontend
 npm run dev
 ```
 
 **Access the application:**
+
 - Frontend: http://localhost:3000
 - Backend API: http://127.0.0.1:8000
 

@@ -44,28 +44,23 @@ app.add_middleware(
 )
 
 
-DEMO_MESSAGES: Dict[str, List[Message]] = {
-    "Alice": [
-        Message(sender="Alice", text="This project is going nowhere!", timestamp="10:23", severity="high"),
-        Message(sender="Bob", text="I disagree. We're making progress.", timestamp="10:24", severity="medium"),
-        Message(sender="Alice", text="Your idea is completely useless.", timestamp="10:25", severity="high"),
-        Message(sender="Manager", text="Let's discuss this constructively.", timestamp="10:26", severity="medium"),
-    ],
-    "Bob": [
-        Message(sender="Bob", text="You never listen to my ideas!", timestamp="14:05", severity="high"),
-        Message(sender="Manager", text="Let's take a step back and discuss.", timestamp="14:06", severity="low"),
-        Message(sender="Bob", text="I appreciate your feedback on this.", timestamp="14:07", severity="low"),
-        Message(sender="Alice", text="Good point, let's work together.", timestamp="14:08", severity="low"),
-    ],
-    "Manager": [
-        Message(sender="Manager", text="Both of you need to communicate better.", timestamp="09:15", severity="medium"),
-        Message(sender="Alice", text="Understood. I'll make more effort.", timestamp="09:16", severity="low"),
-        Message(sender="Bob", text="Thanks for the guidance.", timestamp="09:17", severity="low"),
-        Message(sender="Manager", text="Great! Let's continue working as a team.", timestamp="09:18", severity="low"),
-    ]
-}
+# Single unified chat for all users
+DEMO_MESSAGES: List[Message] = [
+    Message(sender="Manager", text="Both of you need to communicate better.", timestamp="09:15", severity="medium"),
+    Message(sender="Alice", text="Understood. I'll make more effort.", timestamp="09:16", severity="low"),
+    Message(sender="Bob", text="Thanks for the guidance.", timestamp="09:17", severity="low"),
+    Message(sender="Manager", text="Great! Let's continue working as a team.", timestamp="09:18", severity="low"),
+    Message(sender="Alice", text="This project is going nowhere!", timestamp="10:23", severity="high"),
+    Message(sender="Bob", text="I disagree. We're making progress.", timestamp="10:24", severity="medium"),
+    Message(sender="Alice", text="Your idea is completely useless.", timestamp="10:25", severity="high"),
+    Message(sender="Manager", text="Let's discuss this constructively.", timestamp="10:26", severity="medium"),
+    Message(sender="Bob", text="You never listen to my ideas!", timestamp="14:05", severity="high"),
+    Message(sender="Manager", text="Let's take a step back and discuss.", timestamp="14:06", severity="low"),
+    Message(sender="Bob", text="I appreciate your feedback on this.", timestamp="14:07", severity="low"),
+    Message(sender="Alice", text="Good point, let's work together.", timestamp="14:08", severity="low"),
+]
 
-MESSAGES: Dict[str, List[Message]] = {k: list(v) for k, v in DEMO_MESSAGES.items()}
+MESSAGES: List[Message] = list(DEMO_MESSAGES)
 
 INTERVENTION_THRESHOLD = 40
 INTERVENTION_SENDER = "SentinalAI"
@@ -133,14 +128,12 @@ def health() -> Dict[str, str]:
 
 @app.get("/api/users")
 def list_users() -> Dict[str, List[str]]:
-    return {"users": list(MESSAGES.keys())}
+    return {"users": ["Alice", "Bob", "Manager"]}
 
 
-@app.get("/api/messages/{user}")
-def get_messages(user: str) -> Dict[str, List[Message]]:
-    if user not in MESSAGES:
-        raise HTTPException(status_code=404, detail="User not found")
-    return {"messages": MESSAGES[user]}
+@app.get("/api/messages")
+def get_messages() -> Dict[str, List[Message]]:
+    return {"messages": MESSAGES}
 
 
 @app.post("/api/analyze")
@@ -152,15 +145,13 @@ def analyze(req: AnalyzeRequest) -> Dict:
 
 @app.post("/api/send-message")
 def send_message(req: SendMessageRequest) -> Dict:
-    if req.user not in MESSAGES:
-        raise HTTPException(status_code=404, detail="User not found")
     if not req.text or not req.text.strip():
         raise HTTPException(status_code=400, detail="Text is required")
 
     analysis = analyze_text(req.text)
     timestamp = datetime.now().strftime("%H:%M")
     message = Message(sender=req.user, text=req.text, timestamp=timestamp, severity=analysis["severity"])
-    MESSAGES[req.user].append(message)
+    MESSAGES.append(message)
 
     intervention_message: Optional[Message] = None
     if analysis["conflict_score"] >= INTERVENTION_THRESHOLD:
@@ -170,7 +161,7 @@ def send_message(req: SendMessageRequest) -> Dict:
             timestamp=timestamp,
             severity="medium",
         )
-        MESSAGES[req.user].append(intervention_message)
+        MESSAGES.append(intervention_message)
 
     return {
         "message": message,

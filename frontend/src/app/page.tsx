@@ -92,17 +92,11 @@ export default function Home() {
 
   useEffect(() => {
     const loadMessages = async () => {
-      if (!currentUser) {
-        setMessages([]);
-        setAnalysis(null);
-        return;
-      }
-
       setLoading(true);
       setError("");
 
       try {
-        const res = await fetch(`${API_BASE}/api/messages/${currentUser}`);
+        const res = await fetch(`${API_BASE}/api/messages`);
         if (!res.ok) {
           throw new Error("Failed to load messages");
         }
@@ -132,7 +126,12 @@ export default function Home() {
           setAnalysis(null);
         }
       } catch (err) {
-        setMessages(demoMessages[currentUser] || []);
+        const allDemoMessages = [
+          ...demoMessages.Manager,
+          ...demoMessages.Alice,
+          ...demoMessages.Bob
+        ];
+        setMessages(allDemoMessages);
         setAnalysis(null);
         setError("Showing demo conversation. Connect the API for real-time analysis.");
       } finally {
@@ -141,7 +140,7 @@ export default function Home() {
     };
 
     loadMessages();
-  }, [currentUser]);
+  }, []);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -177,7 +176,14 @@ export default function Home() {
       }
 
       const data = await res.json();
-      setMessages((prev) => [...prev, data.message]);
+      
+      // Add new message(s) to the list
+      const newMessages = [data.message];
+      if (data.intervention) {
+        newMessages.push(data.intervention);
+      }
+      setMessages((prev) => [...prev, ...newMessages]);
+      
       const resolvedAnalysis = cached ?? data.analysis;
       analysisCache.current.set(cacheKey, resolvedAnalysis);
       setAnalysis(resolvedAnalysis);
