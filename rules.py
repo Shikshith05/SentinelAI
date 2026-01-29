@@ -1,4 +1,4 @@
-"""
+﻿"""
 rules.py
 Rule-based conflict detection layer.
 
@@ -38,6 +38,7 @@ SARCASM_PHRASES = [
 # Helper functions
 # --------------------------------------------------
 
+
 def contains_any(text: str, phrases: List[str]) -> bool:
     text = text.lower()
     return any(p in text for p in phrases)
@@ -51,6 +52,7 @@ def contains_second_person(text: str) -> bool:
 # --------------------------------------------------
 # Feature extraction (RULE CONDITIONS)
 # --------------------------------------------------
+
 
 def extract_rule_features(text: str, model_output: Dict) -> Dict:
     """
@@ -97,6 +99,7 @@ def extract_rule_features(text: str, model_output: Dict) -> Dict:
 # Conflict score computation
 # --------------------------------------------------
 
+
 def calculate_conflict_score(features: Dict) -> float:
     """
     Convert rule features into a single conflict score
@@ -129,6 +132,7 @@ def calculate_conflict_score(features: Dict) -> float:
 # Final rule engine (used by Streamlit)
 # --------------------------------------------------
 
+
 def apply_rules(text: str, model_output: Dict) -> Dict:
     """
     Main rule engine entry point
@@ -159,6 +163,7 @@ def apply_rules(text: str, model_output: Dict) -> Dict:
 # --------------------------------------------------
 # Optional test
 # --------------------------------------------------
+
 
 if __name__ == "__main__":
     sample_model_output = {
