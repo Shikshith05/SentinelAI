@@ -17,6 +17,57 @@ A real-time conflict detection and analysis web application for identifying esca
 
 ## Setup
 
+## Running on Another Laptop
+
+### Prerequisites
+
+- **Git**
+- **Python 3.10+** (recommended)
+- **Node.js 18+** and **npm**
+
+### 1. Clone the Repository
+
+```bash
+git clone <YOUR_REPO_URL>
+cd SentinalAI
+```
+
+### 2. Create & Activate a Python Virtual Environment
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+```
+
+### 3. Install Backend Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Install Frontend Dependencies
+
+```bash
+cd frontend
+npm install
+```
+
+### 5. Run the Backend
+
+```bash
+cd ..
+uvicorn app:app --reload --port 8000
+```
+
+### 6. Run the Frontend (New Terminal)
+
+```bash
+cd frontend
+npm run dev
+```
+
+The frontend runs at `http://localhost:3000` and connects to the API at `http://localhost:8000`.
+
 ### 1. Install Backend Dependencies
 
 ```bash

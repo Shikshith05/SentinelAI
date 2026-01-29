@@ -275,10 +275,10 @@ export default function Home() {
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
-      <header className="flex flex-col gap-4 text-center md:flex-row md:items-center md:justify-between md:text-left">
-        <div>
-          <p className="text-xs uppercase tracking-[0.25em] text-slate-400">SentinalAI</p>
-          <h1 className="mt-2 text-4xl font-semibold text-white">SentinalAI</h1>
+      <header className="flex flex-col items-center gap-4 text-center">
+        <div className="w-full">
+          <h2 className="text-2xl uppercase tracking-[0.25em] font-bold text-slate-300">SENTINELAI</h2>
+          <h1 className="mt-2 text-5xl font-semibold text-white">Sentinel</h1>
           <p className="mt-2 text-lg text-brand-400">
             Real-time Conflict Detection & De-escalation Assistant
           </p>

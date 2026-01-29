@@ -1,176 +1,203 @@
 ﻿"""
 rules.py
-Rule-based conflict detection layer.
+Explainable conflict + tone detection using compositional linguistic signals.
 
-Consumes outputs from model.py (RoBERTa + Toxicity)
-and applies explainable conflict escalation logic.
+This version correctly flags:
+• negative tone without "you"
+• rejection / dissatisfaction
+• norm violations (profanity)
+• interpersonal conflict
 """
 
-from typing import Dict, List
+from typing import Dict
+import re
 
 
 # --------------------------------------------------
-# Phrase groups (organized & weighted)
+# Signal vocabularies
 # --------------------------------------------------
 
-BLAME_PHRASES = [
-    "you always", "you never", "your fault", "because of you",
-    "you caused", "you messed", "you should have"
-]
+SECOND_PERSON = {"you", "your", "you're", "youve"}
 
-PASSIVE_AGGRESSIVE_PHRASES = [
-    "fine then", "whatever you think", "if you insist",
-    "sure, okay", "do what you want", "as usual"
-]
+ABSOLUTES = {"always", "never", "nothing", "every"}
 
-ESCALATION_PHRASES = [
-    "this is unacceptable", "i'm done", "we need to talk",
-    "this ends now"
-]
+DIRECTIVES = {"stop", "fix", "explain", "do", "dont", "don't"}
 
-SARCASM_PHRASES = [
-    "yeah right", "sure...", "nice job", "great idea",
-    "thanks a lot"
-]
+DISCOURSE_MARKERS = {"but", "clearly", "obviously"}
 
+NEGATIONS = {"not", "dont", "don't", "cant", "can't", "cannot"}
 
-# --------------------------------------------------
-# Helper functions
-# --------------------------------------------------
+REJECTION_VERBS = {"like", "tolerate", "stand", "respect", "accept"}
 
+NEGATIVE_EVALUATIONS = {
+    "unacceptable", "nonsense", "ridiculous",
+    "inappropriate", "wrong", "bad", "terrible", "useless"
+}
 
-def contains_any(text: str, phrases: List[str]) -> bool:
-    text = text.lower()
-    return any(p in text for p in phrases)
-
-
-def contains_second_person(text: str) -> bool:
-    text = text.lower()
-    return any(p in text.split() for p in ["you", "your", "you're"])
+PROFANITY = {
+    "fuck", "shit", "damn", "asshole", "bitch"
+}
 
 
 # --------------------------------------------------
-# Feature extraction (RULE CONDITIONS)
+# Helpers
 # --------------------------------------------------
 
+def tokenize(text: str):
+    return re.findall(r"\b\w+\b", text.lower())
+
+
+def count_overlap(tokens, vocab):
+    return sum(1 for t in tokens if t in vocab)
+
+
+def has_second_person(tokens):
+    return count_overlap(tokens, SECOND_PERSON) > 0
+
+
+# --------------------------------------------------
+# Pattern detectors
+# --------------------------------------------------
+
+def rejection_pattern(tokens):
+    return (
+        count_overlap(tokens, REJECTION_VERBS) > 0
+        and count_overlap(tokens, NEGATIONS) > 0
+    )
+
+
+def blame_pattern(tokens, sentiment_score):
+    return (
+        has_second_person(tokens)
+        and (
+            count_overlap(tokens, ABSOLUTES) > 0
+            or sentiment_score > 0.6
+        )
+    )
+
+
+def confrontational_pattern(tokens, sentiment_score):
+    return (
+        count_overlap(tokens, DIRECTIVES) > 0
+        and sentiment_score > 0.55
+    )
+
+
+def negative_tone_pattern(tokens):
+    return (
+        count_overlap(tokens, NEGATIVE_EVALUATIONS) > 0
+        or ("dont" in tokens and "like" in tokens)
+    )
+
+
+def norm_violation(tokens):
+    return count_overlap(tokens, PROFANITY) > 0
+
+
+# --------------------------------------------------
+# Feature extraction
+# --------------------------------------------------
 
 def extract_rule_features(text: str, model_output: Dict) -> Dict:
-    """
-    Combine linguistic rules + model predictions into features
-    """
+    tokens = tokenize(text)
 
     sentiment = model_output["sentiment"]
     sentiment_score = model_output["sentiment_score"]
     toxicity = model_output["toxicity"]
 
-    features = {
-        # Model-driven
-        "negative_sentiment": sentiment == "negative",
-        "high_negativity": sentiment == "negative" and sentiment_score > 0.6,
-        "toxic": toxicity > 0.5,
+    return {
+        # Tone-level conflict (no target required)
+        "negative_tone": negative_tone_pattern(tokens),
+        "norm_violation": norm_violation(tokens),
 
-        # Combination-based linguistic rules
-        "blame_language": (
-            contains_any(text, BLAME_PHRASES)
-            and contains_second_person(text)
-            and sentiment == "negative"
-        ),
+        # Interpersonal conflict
+        "negative_interaction": sentiment == "negative" and has_second_person(tokens),
+        "rejection": rejection_pattern(tokens),
+        "blame": blame_pattern(tokens, sentiment_score),
+        "confrontational": confrontational_pattern(tokens, sentiment_score),
 
-        "passive_aggressive": (
-            contains_any(text, PASSIVE_AGGRESSIVE_PHRASES)
-            and sentiment != "positive"
-        ),
-
-        "sarcasm": (
-            contains_any(text, SARCASM_PHRASES)
-            and sentiment != "positive"
-        ),
-
-        "escalation_language": (
-            contains_any(text, ESCALATION_PHRASES)
-            and sentiment == "negative"
-        )
+        # Severe
+        "toxic": toxicity > 0.4,
     }
 
-    return features
-
 
 # --------------------------------------------------
-# Conflict score computation
+# Conflict scoring
 # --------------------------------------------------
-
 
 def calculate_conflict_score(features: Dict) -> float:
-    """
-    Convert rule features into a single conflict score
-    """
-
     score = 0.0
 
-    if features["high_negativity"]:
-        score += 0.25
+    weights = {
+        "negative_tone": 0.3,
+        "norm_violation": 0.6,
 
-    if features["blame_language"]:
-        score += 0.30
+        "negative_interaction": 0.2,
+        "rejection": 0.35,
+        "blame": 0.3,
+        "confrontational": 0.25,
 
-    if features["passive_aggressive"]:
-        score += 0.20
+        "toxic": 0.5,
+    }
 
-    if features["sarcasm"]:
+    for k, w in weights.items():
+        if features.get(k):
+            score += w
+
+    # Synergy bonuses
+    if features["negative_tone"] and features["rejection"]:
         score += 0.15
 
-    if features["escalation_language"]:
-        score += 0.35
-
-    if features["toxic"]:
-        score += 0.50
+    if features["blame"] and features["confrontational"]:
+        score += 0.15
 
     return min(score, 1.0)
 
 
 # --------------------------------------------------
-# Final rule engine (used by Streamlit)
+# Public API
 # --------------------------------------------------
 
-
 def apply_rules(text: str, model_output: Dict) -> Dict:
-    """
-    Main rule engine entry point
-    """
-
     features = extract_rule_features(text, model_output)
-    conflict_score = calculate_conflict_score(features)
+    score = calculate_conflict_score(features)
 
-    # Risk levels
-    if conflict_score < 0.3:
+    if score < 0.3:
         risk = "LOW"
         recommendation = "No action needed"
-    elif conflict_score < 0.6:
+    elif score < 0.6:
         risk = "MEDIUM"
-        recommendation = "Suggest cooling-off or private discussion"
+        recommendation = "Suggest cooling-off or rephrasing"
     else:
         risk = "HIGH"
         recommendation = "Intervene or alert moderator"
 
     return {
-        "conflict_score": round(conflict_score, 3),
+        "conflict_score": round(score, 3),
         "risk_level": risk,
         "recommendation": recommendation,
-        "triggered_rules": [k for k, v in features.items() if v]
+        "triggered_rules": [k for k, v in features.items() if v],
     }
 
 
 # --------------------------------------------------
-# Optional test
+# Manual test
 # --------------------------------------------------
-
 
 if __name__ == "__main__":
-    sample_model_output = {
+    sample = {
         "sentiment": "negative",
-        "sentiment_score": 0.82,
-        "toxicity": 0.67
+        "sentiment_score": 0.75,
+        "toxicity": 0.1,
     }
 
-    text = "You always do this. This is your fault."
-    print(apply_rules(text, sample_model_output))
+    tests = [
+        "i dont like this behaviour",
+        "i dont like this tone",
+        "this is not acceptable",
+        "what nonsense is this",
+        "fuck you",
+    ]
+
+    for t in tests:
+        print(t, "->", apply_rules(t, sample))

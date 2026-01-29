@@ -67,6 +67,13 @@ DEMO_MESSAGES: Dict[str, List[Message]] = {
 
 MESSAGES: Dict[str, List[Message]] = {k: list(v) for k, v in DEMO_MESSAGES.items()}
 
+INTERVENTION_THRESHOLD = 40
+INTERVENTION_SENDER = "SentinalAI"
+INTERVENTION_TEXT = (
+    "Let's keep the conversation respectful and constructive. "
+    "Please rephrase to avoid escalating conflict."
+)
+
 
 def analyze_text(text: str) -> Dict:
     """Analyze text using ML + rules."""
@@ -155,7 +162,18 @@ def send_message(req: SendMessageRequest) -> Dict:
     message = Message(sender=req.user, text=req.text, timestamp=timestamp, severity=analysis["severity"])
     MESSAGES[req.user].append(message)
 
+    intervention_message: Optional[Message] = None
+    if analysis["conflict_score"] >= INTERVENTION_THRESHOLD:
+        intervention_message = Message(
+            sender=INTERVENTION_SENDER,
+            text=INTERVENTION_TEXT,
+            timestamp=timestamp,
+            severity="medium",
+        )
+        MESSAGES[req.user].append(intervention_message)
+
     return {
         "message": message,
-        "analysis": analysis
+        "analysis": analysis,
+        "intervention": intervention_message
     }
